@@ -15,6 +15,8 @@ var allocator = gpa.allocator();
 const execute_command = @import("methods/execute_command.zig").method;
 const list_methods = @import("methods/list_methods.zig").method;
 
+const server_log = std.log.scoped(.http_server);
+
 pub const RpcMethods = .{
     execute_command,
     list_methods,
@@ -41,7 +43,7 @@ const JsonRpcResponse = struct {
 };
 
 fn handleRequest(res: *Server.Response) !void {
-    std.log.info("{s} {s} {s}", .{ @tagName(res.request.method), @tagName(res.request.version), res.request.target });
+    server_log.info("{s} {s} {s}", .{ @tagName(res.request.method), @tagName(res.request.version), res.request.target });
 
     if (!std.mem.startsWith(u8, res.request.target, "/rpc")) {
         res.status = .not_found;
@@ -58,7 +60,7 @@ fn handleRequest(res: *Server.Response) !void {
         };
 
         const parsed = std.json.parseFromSlice(JsonRpcRequest, allocator, body, .{}) catch |err| {
-            std.log.err("Failed to parse request body {}", .{err});
+            server_log.err("Failed to parse request body {}", .{err});
 
             if (@errorReturnTrace()) |trace| {
                 std.debug.dumpStackTrace(trace.*);
@@ -151,7 +153,7 @@ fn serverThread(addr: std.net.Address) !void {
     defer _ = gpa.deinit();
 
     runServer(&server) catch |err| {
-        std.log.err("server error: {}\n", .{err});
+        server_log.err("server error: {}\n", .{err});
 
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
@@ -169,7 +171,7 @@ pub fn start() !void {
         running = true;
         server_thread = try Thread.spawn(.{}, serverThread, .{addr});
 
-        std.log.info("Started HTTP Server on {}", .{addr});
+        server_log.info("Started HTTP Server on {}", .{addr});
     }
 }
 
@@ -178,6 +180,6 @@ pub fn stop() void {
         running = false;
         thread.join();
 
-        std.log.info("Stopped HTTP Server", .{});
+        server_log.info("Stopped HTTP Server", .{});
     }
 }

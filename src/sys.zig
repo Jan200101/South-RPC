@@ -17,7 +17,16 @@ var sys: ?*CSys = null;
 pub const LogLevel = enum(c_int) { LOG_INFO, LOG_WARN, LOG_ERR };
 
 pub fn init() void {
-    sys = @ptrCast(@alignCast(northstar.create_interface.?("NSSys001", null)));
+    if (northstar.create_interface) |create_interface| {
+        var status: interface.InterfaceStatus = .IFACE_OK;
+        sys = @ptrCast(@alignCast(create_interface("NSSys001", &status)));
+
+        if (status != .IFACE_OK) {
+            std.log.err("Failed to create NSSys001 interface: {}", .{status});
+        }
+    } else {
+        std.log.err("Failed to create NSSys001 interface: {s}", .{"Failed to resolve CreateInterface"});
+    }
 }
 
 pub fn log(
@@ -26,7 +35,10 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    _ = scope;
+    const scope_prefix = switch (scope) {
+        std.log.default_log_scope => "",
+        else => "(" ++ @tagName(scope) ++ ")",
+    };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -40,9 +52,12 @@ pub fn log(
         .debug => LogLevel.LOG_INFO,
     };
 
-    const msg = std.fmt.allocPrintZ(allocator, format, args) catch unreachable;
+    const msg = std.fmt.allocPrintZ(allocator, scope_prefix ++ format, args) catch unreachable;
 
     if (sys) |s| {
-        s.*.vtable.log(s, northstar.data.handle, log_level, msg);
+        s.vtable.log(s, northstar.data.handle, log_level, msg);
+    } else {
+        //  Northstar log has not been established, fallback to default log
+        std.log.defaultLog(level, scope, format, args);
     }
 }

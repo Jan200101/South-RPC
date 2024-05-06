@@ -46,9 +46,9 @@ pub fn GetString(self: *anyopaque, prop: PluginString) callconv(.C) ?[*:0]const 
     _ = self;
 
     switch (prop) {
-        .ID_NAME => return @import("root").PLUGIN_NAME,
-        .ID_LOG_NAME => return @import("root").LOG_NAME,
-        .ID_DEPENDENCY_NAME => return @import("root").DEPENDENCY_NAME,
+        .ID_NAME => return @import("../main.zig").PLUGIN_NAME,
+        .ID_LOG_NAME => return @import("../main.zig").LOG_NAME,
+        .ID_DEPENDENCY_NAME => return @import("../main.zig").DEPENDENCY_NAME,
         else => return null,
     }
 }

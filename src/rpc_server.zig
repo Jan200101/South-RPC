@@ -2,6 +2,7 @@ const std = @import("std");
 
 const http = std.http;
 const Server = http.Server;
+const NetServer = std.net.Server;
 const Thread = std.Thread;
 
 const max_header_size = 8192;
@@ -42,16 +43,21 @@ const JsonRpcResponse = struct {
     id: ?std.json.Value = null,
 };
 
-fn handleRequest(res: *Server.Response) !void {
-    server_log.info("{s} {s} {s}", .{ @tagName(res.request.method), @tagName(res.request.version), res.request.target });
+fn handleRequest(request: *Server.Request) !void {
+    server_log.info("{s} {s} {s}", .{ @tagName(request.head.method), @tagName(request.head.version), request.head.target });
 
-    if (!std.mem.startsWith(u8, res.request.target, "/rpc")) {
-        res.status = .not_found;
-        try res.do();
+    if (!std.mem.startsWith(u8, request.head.target, "/rpc")) {
+        try request.respond("not found", .{
+            .status = .not_found,
+            .extra_headers = &.{
+                .{ .name = "content-type", .value = "text/plain" },
+            },
+        });
         return;
     }
 
-    const body = try res.reader().readAllAlloc(allocator, 8192);
+    const reader = try request.reader();
+    const body = try reader.readAllAlloc(allocator, 8192);
     defer allocator.free(body);
 
     const resp = blk: {
@@ -75,16 +81,16 @@ fn handleRequest(res: *Server.Response) !void {
         };
         defer parsed.deinit();
 
-        var request = parsed.value;
+        var data = parsed.value;
 
-        if (request.id) |request_id| {
+        if (data.id) |request_id| {
             if (request_id != .integer and request_id != .string) {
-                request.id = null;
+                data.id = null;
             }
         }
-        response.id = request.id;
+        response.id = data.id;
 
-        if (request.params) |request_params| {
+        if (data.params) |request_params| {
             if (request_params != .object and request_params != .array) {
                 response.@"error" = .{
                     .code = -32602,
@@ -96,8 +102,8 @@ fn handleRequest(res: *Server.Response) !void {
         }
 
         inline for (RpcMethods) |method| {
-            if (std.mem.eql(u8, method.name, request.method)) {
-                response.result = method.func(allocator, request.params) catch |err| method_blk: {
+            if (std.mem.eql(u8, method.name, data.method)) {
+                response.result = method.func(allocator, data.params) catch |err| method_blk: {
                     response.@"error" = .{
                         .code = -32603,
                         .message = @errorName(err),
@@ -117,56 +123,36 @@ fn handleRequest(res: *Server.Response) !void {
     };
 
     const json_resp = try std.json.stringifyAlloc(allocator, resp, .{});
-    res.transfer_encoding = .{ .content_length = json_resp.len };
+    defer allocator.free(json_resp);
 
-    try res.do();
-    try res.writeAll(json_resp);
-    try res.finish();
+    try request.respond(json_resp, .{
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json." },
+        },
+    });
 }
+fn serverThread(addr: std.net.Address) !void {
+    var read_buffer: [8000]u8 = undefined;
+    var http_server = try addr.listen(.{});
 
-fn runServer(srv: *Server) !void {
-    outer: while (running) {
-        var res = try srv.accept(.{
-            .allocator = allocator,
-            .header_strategy = .{ .dynamic = max_header_size },
-        });
-        defer res.deinit();
+    accept: while (true) {
+        const connection = try http_server.accept();
+        defer connection.stream.close();
 
-        while (res.reset() != .closing) {
-            res.wait() catch |err| switch (err) {
-                error.HttpHeadersInvalid => continue :outer,
-                error.EndOfStream => continue,
-                else => return err,
+        var server = std.http.Server.init(connection, &read_buffer);
+        while (server.state == .ready) {
+            var request = server.receiveHead() catch |err| {
+                std.debug.print("error: {s}\n", .{@errorName(err)});
+                continue :accept;
             };
-
-            try handleRequest(&res);
+            try handleRequest(&request);
         }
     }
 }
 
-fn serverThread(addr: std.net.Address) !void {
-    var server = Server.init(allocator, .{ .reuse_address = true });
-
-    try server.listen(addr);
-    defer server.deinit();
-
-    defer _ = gpa.deinit();
-
-    runServer(&server) catch |err| {
-        server_log.err("server error: {}\n", .{err});
-
-        if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace.*);
-        }
-
-        _ = gpa.deinit();
-        std.os.exit(1);
-    };
-}
-
 pub fn start() !void {
     if (server_thread == null) {
-        var addr = try std.net.Address.parseIp("127.0.0.1", 26505);
+        const addr = try std.net.Address.parseIp("127.0.0.1", 26505);
 
         running = true;
         server_thread = try Thread.spawn(.{}, serverThread, .{addr});

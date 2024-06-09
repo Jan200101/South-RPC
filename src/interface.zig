@@ -3,6 +3,8 @@ const std = @import("std");
 const PluginCallbacks001 = @import("interfaces/PluginCallbacks001.zig").plugin_interface;
 const PluginId001 = @import("interfaces/PluginId001.zig").plugin_interface;
 
+pub const GetInterfaceType = ?*const fn ([*:0]const u8, ?*const InterfaceStatus) callconv(.C) *anyopaque;
+
 pub const interfaces = .{
     PluginCallbacks001,
     PluginId001,

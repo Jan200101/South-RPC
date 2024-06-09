@@ -7,13 +7,11 @@ pub const NorthstarData = extern struct {
     handle: ?windows.HMODULE,
 };
 
-pub var data: NorthstarData = .{
-    .handle = null,
-};
+pub var plugin_handle: ?windows.HMODULE = null;
 
-pub var create_interface: ?*const fn ([*:0]const u8, ?*const interface.InterfaceStatus) callconv(.C) *anyopaque = null;
+pub var create_interface: interface.GetInterfaceType = null;
 
 pub fn init(ns_module: windows.HMODULE, init_data: *NorthstarData) void {
     create_interface = @ptrCast(windows.kernel32.GetProcAddress(ns_module, "CreateInterface"));
-    data.handle = init_data.*.handle;
+    plugin_handle = init_data.*.handle;
 }

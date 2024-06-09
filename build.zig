@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
     });
 
     const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .Debug,
+        .preferred_optimize_mode = .ReleaseFast,
     });
 
     const lib = b.addSharedLibrary(.{
-        .name = "ZigPlugin",
+        .name = "SouthRPC",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,

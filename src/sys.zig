@@ -37,7 +37,7 @@ pub fn log(
 ) void {
     const scope_prefix = switch (scope) {
         std.log.default_log_scope => "",
-        else => "(" ++ @tagName(scope) ++ ")",
+        else => "(" ++ @tagName(scope) ++ ") ",
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -55,9 +55,11 @@ pub fn log(
     const msg = std.fmt.allocPrintZ(allocator, scope_prefix ++ format, args) catch unreachable;
 
     if (sys) |s| {
-        s.vtable.log(s, northstar.data.handle, log_level, msg);
-    } else {
-        //  Northstar log has not been established, fallback to default log
-        std.log.defaultLog(level, scope, format, args);
+        if (s.vtable) |vtable| {
+            vtable.log(s, northstar.plugin_handle, log_level, msg);
+            return;
+        }
     }
+
+    std.log.defaultLog(level, scope, format, args);
 }

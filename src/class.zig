@@ -21,7 +21,7 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
 
     const ClassStruct = @Type(.{
         .Struct = .{
-            .layout = .Extern,
+            .layout = .@"extern",
             .fields = comptime blk: {
                 var class_fields = struct {
                     fields: []const StructField = &[_]StructField{},
@@ -31,7 +31,7 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
                             .name = "vtable",
                             .type = @Type(.{
                                 .Struct = .{
-                                    .layout = .Extern,
+                                    .layout = .@"extern",
                                     .fields = &[_]StructField{
                                         field,
                                     },
@@ -52,17 +52,23 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
                             } else null;
 
                             if (vtable_index) |i| {
-                                const old_vtable_pointer = self.fields[i];
-                                const OldVTablePointerType = old_vtable_pointer.type;
-                                const old_vtable_pointer_type_info = @typeInfo(OldVTablePointerType);
-                                if (old_vtable_pointer_type_info != .Pointer) {
-                                    @compileError("expected vtable to be pointer, found " ++ @typeName(OldVTablePointerType));
+                                const old_vtable = self.fields[i];
+                                const OldVTableType = old_vtable.type;
+                                const old_vtable_type_info = @typeInfo(OldVTableType);
+                                if (old_vtable_type_info != .Optional) {
+                                    @compileError("expected vtable to be optional, found " ++ @typeName(OldVTableType));
                                 }
 
-                                const OldVTableType = old_vtable_pointer_type_info.Pointer.child;
-                                const old_vtable_type_info = @typeInfo(OldVTableType);
-                                if (old_vtable_type_info != .Struct or old_vtable_type_info.Struct.is_tuple != false) {
-                                    @compileError("expected vtable to be pointer to struct, found pointer to " ++ @typeName(OldVTableType));
+                                const OldVTablePointerType = old_vtable_type_info.Optional.child;
+                                const old_vtable_pointer_type_info = @typeInfo(OldVTablePointerType);
+                                if (old_vtable_pointer_type_info != .Pointer) {
+                                    @compileError("expected vtable to be optional pointer, found " ++ @typeName(OldVTableType));
+                                }
+
+                                const OldVTableStructType = old_vtable_pointer_type_info.Pointer.child;
+                                const old_vtable_struct_type_info = @typeInfo(OldVTableStructType);
+                                if (old_vtable_struct_type_info != .Struct or old_vtable_struct_type_info.Struct.is_tuple != false) {
+                                    @compileError("expected vtable to be optional pointer to struct, found pointer to " ++ @typeName(OldVTableType));
                                 }
 
                                 const FieldType = field.type;
@@ -73,30 +79,34 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
 
                                 self.fields = &[_]StructField{
                                     .{
-                                        .name = old_vtable_pointer.name,
+                                        .name = old_vtable.name,
                                         .type = @Type(.{
-                                            .Pointer = .{
-                                                .size = old_vtable_pointer_type_info.Pointer.size,
-                                                .is_const = old_vtable_pointer_type_info.Pointer.is_const,
-                                                .is_volatile = old_vtable_pointer_type_info.Pointer.is_volatile,
-                                                .alignment = old_vtable_pointer_type_info.Pointer.alignment,
-                                                .address_space = old_vtable_pointer_type_info.Pointer.address_space,
+                                            .Optional = .{
                                                 .child = @Type(.{
-                                                    .Struct = .{
-                                                        .layout = old_vtable_type_info.Struct.layout,
-                                                        .backing_integer = old_vtable_type_info.Struct.backing_integer,
-                                                        .fields = old_vtable_type_info.Struct.fields ++ field_type_info.Struct.fields,
-                                                        .decls = old_vtable_type_info.Struct.decls,
-                                                        .is_tuple = old_vtable_type_info.Struct.is_tuple,
+                                                    .Pointer = .{
+                                                        .size = old_vtable_pointer_type_info.Pointer.size,
+                                                        .is_const = old_vtable_pointer_type_info.Pointer.is_const,
+                                                        .is_volatile = old_vtable_pointer_type_info.Pointer.is_volatile,
+                                                        .alignment = old_vtable_pointer_type_info.Pointer.alignment,
+                                                        .address_space = old_vtable_pointer_type_info.Pointer.address_space,
+                                                        .child = @Type(.{
+                                                            .Struct = .{
+                                                                .layout = old_vtable_struct_type_info.Struct.layout,
+                                                                .backing_integer = old_vtable_struct_type_info.Struct.backing_integer,
+                                                                .fields = old_vtable_struct_type_info.Struct.fields ++ field_type_info.Struct.fields,
+                                                                .decls = old_vtable_struct_type_info.Struct.decls,
+                                                                .is_tuple = old_vtable_struct_type_info.Struct.is_tuple,
+                                                            },
+                                                        }),
+                                                        .is_allowzero = old_vtable_pointer_type_info.Pointer.is_allowzero,
+                                                        .sentinel = old_vtable_pointer_type_info.Pointer.sentinel,
                                                     },
                                                 }),
-                                                .is_allowzero = old_vtable_pointer_type_info.Pointer.is_allowzero,
-                                                .sentinel = old_vtable_pointer_type_info.Pointer.sentinel,
                                             },
                                         }),
-                                        .default_value = old_vtable_pointer.default_value,
-                                        .is_comptime = old_vtable_pointer.is_comptime,
-                                        .alignment = old_vtable_pointer.alignment,
+                                        .default_value = old_vtable.default_value,
+                                        .is_comptime = old_vtable.is_comptime,
+                                        .alignment = old_vtable.alignment,
                                     },
                                 } ++ self.fields[1..];
                             } else {
@@ -121,22 +131,26 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
                                     .{
                                         .name = field.name,
                                         .type = @Type(.{
-                                            .Pointer = .{
-                                                .size = .One,
-                                                .is_const = true,
-                                                .is_volatile = false,
-                                                .alignment = 0,
-                                                .address_space = .generic,
+                                            .Optional = .{
                                                 .child = @Type(.{
-                                                    .Struct = .{
-                                                        .layout = .Extern,
-                                                        .fields = field_type_info.Struct.fields,
-                                                        .decls = &.{},
-                                                        .is_tuple = false,
+                                                    .Pointer = .{
+                                                        .size = .One,
+                                                        .is_const = true,
+                                                        .is_volatile = false,
+                                                        .alignment = 0,
+                                                        .address_space = .generic,
+                                                        .child = @Type(.{
+                                                            .Struct = .{
+                                                                .layout = .@"extern",
+                                                                .fields = field_type_info.Struct.fields,
+                                                                .decls = &.{},
+                                                                .is_tuple = false,
+                                                            },
+                                                        }),
+                                                        .is_allowzero = false,
+                                                        .sentinel = null,
                                                     },
                                                 }),
-                                                .is_allowzero = false,
-                                                .sentinel = null,
                                             },
                                         }),
                                         .default_value = null,
@@ -163,7 +177,7 @@ pub fn Class(comptime base: anytype, comptime members: anytype) type {
 
                     if (b_type_info != .Struct or b_type_info.Struct.is_tuple != false) {
                         @compileError("expected struct base, found " ++ @typeName(b));
-                    } else if (b_type_info.Struct.layout != .Extern) {
+                    } else if (b_type_info.Struct.layout != .@"extern") {
                         @compileError("expected extern struct, found " ++ @tagName(b_type_info.Struct.layout));
                     }
 

@@ -41,6 +41,7 @@ fn execute_command(allocator: Allocator, params: ?std.json.Value) !?std.json.Val
 
         break :blk try allocator.dupeZ(u8, command_item.string);
     };
+    defer allocator.free(command);
 
     if (engine.Cbuf) |Cbuf| {
         const cur_player = Cbuf.GetCurrentPlayer();

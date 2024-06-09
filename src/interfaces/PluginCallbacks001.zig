@@ -1,14 +1,18 @@
 const std = @import("std");
 const windows = std.os.windows;
 
+const Thread = std.Thread;
+
 const Class = @import("../class.zig").Class;
 
 const interface = @import("../interface.zig");
 const northstar = @import("../northstar.zig");
 const squirrel = @import("../squirrel.zig");
 const sys = @import("../sys.zig");
-const server = @import("../server.zig");
+const rpc_server = @import("../rpc_server.zig");
+const gameconsole = @import("../gameconsole.zig");
 const engine = @import("../engine.zig");
+const client = @import("../client.zig");
 
 const CSquirrelVM = squirrel.CSquirrelVM;
 
@@ -52,11 +56,11 @@ pub fn Init(self: *anyopaque, module: windows.HMODULE, data: *northstar.Northsta
     sys.init();
 
     if (reloaded != 0) {
-        server.stop();
+        rpc_server.stop();
     }
 
-    if (!server.running) {
-        server.start() catch std.log.err("Failed to start HTTP Server", .{});
+    if (!rpc_server.running) {
+        rpc_server.start() catch std.log.err("Failed to start HTTP Server", .{});
     }
 
     std.log.info("Loaded", .{});
@@ -69,7 +73,7 @@ pub fn Finalize(self: *anyopaque) callconv(.C) void {
 pub fn Unload(self: *anyopaque) callconv(.C) bool {
     _ = self;
 
-    server.stop();
+    rpc_server.stop();
 
     return true;
 }
@@ -92,10 +96,11 @@ pub fn OnLibraryLoaded(self: *anyopaque, module: windows.HMODULE, name_ptr: [*:0
     const name = std.mem.span(name_ptr);
 
     if (std.mem.eql(u8, name, "engine.dll")) {
-        engine.Cbuf = .{
-            .GetCurrentPlayer = @ptrFromInt(@intFromPtr(module) + 0x120630),
-            .AddText = @ptrFromInt(@intFromPtr(module) + 0x1203B0),
-            .Execute = @ptrFromInt(@intFromPtr(module) + 0x1204B0),
+        engine.init(module);
+    } else if (std.mem.eql(u8, name, "client.dll")) {
+        client.init(module);
+        _ = Thread.spawn(.{}, gameconsole.hook, .{}) catch |err| {
+            std.log.err("Failed to hook GameConsole {}", .{err});
         };
     }
 }

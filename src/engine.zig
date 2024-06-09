@@ -1,3 +1,6 @@
+const std = @import("std");
+const windows = std.os.windows;
+
 pub const ECommandTarget_t = enum(c_int) {
     CBUF_FIRST_PLAYER = 0,
     CBUF_LAST_PLAYER = 1, // MAX_SPLITSCREEN_CLIENTS - 1, MAX_SPLITSCREEN_CLIENTS = 2
@@ -48,3 +51,11 @@ pub const CbufType = struct {
 };
 
 pub var Cbuf: ?CbufType = null;
+
+pub fn init(module: windows.HMODULE) void {
+    Cbuf = .{
+        .GetCurrentPlayer = @ptrFromInt(@intFromPtr(module) + 0x120630),
+        .AddText = @ptrFromInt(@intFromPtr(module) + 0x1203B0),
+        .Execute = @ptrFromInt(@intFromPtr(module) + 0x1204B0),
+    };
+}

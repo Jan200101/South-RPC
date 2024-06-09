@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const server = @import("../server.zig");
-const RpcMethods = server.RpcMethods;
+const rpc_server = @import("../rpc_server.zig");
+const RpcMethods = rpc_server.RpcMethods;
 
 const Allocator = std.mem.Allocator;
 
